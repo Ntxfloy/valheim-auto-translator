@@ -59,7 +59,9 @@ namespace ValheimAutoTranslator
         public static void Request(string context, string source)
         {
             if (!running || TextSafety.IsDemoChangelog(source) ||
-                TranslationCache.IsKnownTranslation(source) || !PlaceholderGuard.NeedsTranslation(source)) return;
+                TranslationCache.IsKnownTranslation(source) ||
+                TranslationCache.IsPermanentFailed(context, source) ||
+                !PlaceholderGuard.NeedsTranslation(source)) return;
             string cached;
             if (TranslationCache.TryGet(context, source, out cached)) return;
             string key = context + "\t" + source;
@@ -168,6 +170,7 @@ namespace ValheimAutoTranslator
                 Pending.TryRemove(job.Key, out ignored);
                 if (Rejected.Count >= MaxRejected) Rejected.Clear();
                 Rejected[job.Key] = DateTime.UtcNow.Ticks;
+                TranslationCache.AddPermanentFailed(job.Context, job.Source, reason);
                 if (settings != null && settings.verboseLogging)
                     GATLog.Warn("Rejected " + job.Context + " (length " + job.Source.Length + "): " + reason);
                 return;

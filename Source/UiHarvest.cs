@@ -40,7 +40,15 @@ namespace ValheimAutoTranslator
             bool cached = TranslationCache.TryGet("ui", source, out translated);
             if (cached) text = translated;
             bool delayed = !cached && TextSafety.ContainsDigit(source);
-            if (!cached && !delayed) TranslateWorker.Request("ui", source);
+            if (!cached && !delayed)
+            {
+                string template;
+                List<string> numbers;
+                if (PlaceholderGuard.TryTemplateNumbers(source, out template, out numbers))
+                    TranslateWorker.Request("ui", template);
+                else
+                    TranslateWorker.Request("ui", source);
+            }
 
             Entry previous;
             bool sameSource = Entries.TryGetValue(id, out previous) && previous.Source == source;
@@ -74,7 +82,12 @@ namespace ValheimAutoTranslator
                 if (obj == null) { dead.Add(pair.Key); continue; }
                 string current = entry.IsTmp ? ((TMP_Text)obj).text : ((Text)obj).text;
                 if (current != entry.Rendered) { dead.Add(pair.Key); continue; }
-                TranslateWorker.Request("ui", entry.Source);
+                string template;
+                List<string> numbers;
+                if (PlaceholderGuard.TryTemplateNumbers(entry.Source, out template, out numbers))
+                    TranslateWorker.Request("ui", template);
+                else
+                    TranslateWorker.Request("ui", entry.Source);
                 entry.Queued = true;
             }
             foreach (int id in dead) Entries.Remove(id);

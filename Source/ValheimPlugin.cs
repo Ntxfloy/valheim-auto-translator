@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using BepInEx;
 using BepInEx.Logging;
@@ -65,7 +66,12 @@ namespace ValheimAutoTranslator
             if (TextSafety.IsDemoChangelog(source) || TranslationCache.IsKnownTranslation(source)) return source;
             string translated;
             if (TranslationCache.TryGet(context, source, out translated)) return translated;
-            TranslateWorker.Request(context, source);
+            string template;
+            List<string> numbers;
+            if (PlaceholderGuard.TryTemplateNumbers(source, out template, out numbers))
+                TranslateWorker.Request(context, template);
+            else
+                TranslateWorker.Request(context, source);
             return source;
         }
 
@@ -107,9 +113,9 @@ namespace ValheimAutoTranslator
     [HarmonyPatch(typeof(Localization), "Localize", new[] { typeof(string) })]
     internal static class PatchLocalizeString
     {
-        private static void Postfix(Localization __instance, ref string __result)
+        private static void Prefix(Localization __instance, ref string text)
         {
-            if (ValheimPlugin.IsRussian(__instance)) __result = ValheimPlugin.Get("template", __result);
+            if (ValheimPlugin.IsRussian(__instance)) text = ValheimPlugin.Get("template", text);
         }
     }
 

@@ -13,9 +13,9 @@ namespace ValheimAutoTranslator
 	/// </summary>
 	public static class PlaceholderGuard
 	{
-		// [[ count ]], {PAWN_labelShort}, {0}, <color=#FF0000>, </color>, [tag], \n
+		// [[ count ]], {PAWN_labelShort}, {0}, <color=#FF0000>, </color>, [tag], \n, $token
 		public static readonly Regex Ph = new Regex(
-			@"\[\[[^\]]*\]\]|\{[^{}]*\}|<[^<>]+>|\[[^\[\]]+\]|\$[A-Za-z_][A-Za-z_0-9]*|\$[0-9]+|\\n",
+			@"\[\[[^\]]*\]\]|\{[^{}]*\}|<[^<>]+>|\[[^\[\]]+\]|\$[a-zA-Z0-9_]+|\\n",
 			RegexOptions.Compiled);
 
 		public struct PlaceholderMatch
@@ -282,7 +282,7 @@ namespace ValheimAutoTranslator
 		}
 
 		private static readonly Regex TagRegex = new Regex(
-			@"⟦[^⟧]*⟧|<[^>]*>|\{[^{}]*\}|\[\[[^\]]*\]\]|\[[^\]]*\]|\$[A-Za-z_][A-Za-z_0-9]*|\$[0-9]+",
+			@"⟦[^⟧]*⟧|<[^>]*>|\{[^{}]*\}|\[\[[^\]]*\]\]|\[[^\]]*\]|\$[a-zA-Z0-9_]+",
 			RegexOptions.Compiled);
 
 		public static string StripTagsAndPlaceholders(string s)
@@ -653,6 +653,89 @@ namespace ValheimAutoTranslator
 			foreach (var kv in map)
 				sb.Append(MarkerLeft).Append(kv.Key).Append(MarkerRight).Append(' ');
 			return sb.ToString().TrimEnd();
+		}
+
+		public static readonly Regex NumberPattern = new Regex(
+			@"(?<![a-zA-Z0-9_])\d+(?:[.,]\d+)?(?![a-zA-Z0-9_])",
+			RegexOptions.Compiled);
+
+		/// <summary>
+		/// Маскирует независимые числа в строке под {0}, {1}, … для шаблонизации динамических строк (например, "Wood 34/50" -> "Wood {0}/{1}").
+		/// Числа внутри тегов, плейсхолдеров и служебных токенов НЕ затрагиваются.
+		/// </summary>
+		public static bool TryTemplateNumbers(string src, out string template, out List<string> numbers)
+		{
+			template = src;
+			numbers = null;
+			if (string.IsNullOrEmpty(src)) return false;
+
+			var phMatches = GetPlaceholderMatches(src);
+			var numMatches = NumberPattern.Matches(src);
+			if (numMatches.Count == 0) return false;
+
+			var validNums = new List<Match>();
+			foreach (Match nm in numMatches)
+			{
+				bool insidePh = false;
+				for (int p = 0; p < phMatches.Count; p++)
+				{
+					var ph = phMatches[p];
+					if (nm.Index >= ph.Index && (nm.Index + nm.Length) <= (ph.Index + ph.Length))
+					{
+						insidePh = true;
+						break;
+					}
+				}
+				if (!insidePh) validNums.Add(nm);
+			}
+
+			if (validNums.Count == 0) return false;
+
+			numbers = new List<string>(validNums.Count);
+			var sb = new StringBuilder(src.Length + 16);
+			int prev = 0;
+			for (int idx = 0; idx < validNums.Count; idx++)
+			{
+				Match m = validNums[idx];
+				sb.Append(src, prev, m.Index - prev);
+				sb.Append('{').Append(idx).Append('}');
+				numbers.Add(m.Value);
+				prev = m.Index + m.Length;
+			}
+			sb.Append(src, prev, src.Length - prev);
+			template = sb.ToString();
+			return true;
+		}
+
+		/// <summary>
+		/// Подставляет извлечённые числа обратно в переведённый шаблон по {0}, {1}, …
+		/// </summary>
+		public static string RestoreNumbers(string template, List<string> numbers)
+		{
+			if (string.IsNullOrEmpty(template) || numbers == null || numbers.Count == 0) return template;
+			var sb = new StringBuilder(template.Length + 16);
+			int i = 0;
+			while (i < template.Length)
+			{
+				if (template[i] == '{')
+				{
+					int close = template.IndexOf('}', i + 1);
+					if (close > i + 1 && close - i <= 4)
+					{
+						string numStr = template.Substring(i + 1, close - i - 1);
+						int idx;
+						if (int.TryParse(numStr, out idx) && idx >= 0 && idx < numbers.Count)
+						{
+							sb.Append(numbers[idx]);
+							i = close + 1;
+							continue;
+						}
+					}
+				}
+				sb.Append(template[i]);
+				i++;
+			}
+			return sb.ToString();
 		}
 	}
 }
