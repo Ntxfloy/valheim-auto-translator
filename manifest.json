@@ -3,7 +3,7 @@
   "author": "Ntxfloy",
   "version_number": "0.1.3",
   "website_url": "https://github.com/Ntxfloy/valheim-auto-translator",
-  "description": "Experimental client-side Russian translator for Valheim mods using your OpenAI-compatible endpoint. Caches accepted translations locally.",
+  "description": "Автоперевод английских строк модов Valheim на русский через ваш OpenAI-совместимый сервис. Сохраняет переводы в локальном кэше.",
   "dependencies": [
     "denikson-BepInExPack_Valheim-5.4.2350"
   ]
