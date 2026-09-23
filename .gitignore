@@ -1,0 +1,11 @@
+bin/
+obj/
+tests/bin/
+tests/obj/
+*.zip
+*.log
+*.tsv
+*.bckp
+*.cfg
+*.user
+.vs/
