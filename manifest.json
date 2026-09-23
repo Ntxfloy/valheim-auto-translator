@@ -1,7 +1,7 @@
 {
   "name": "ValheimAutoTranslator",
   "author": "Ntxfloy",
-  "version_number": "0.1.3",
+  "version_number": "0.1.4",
   "website_url": "https://github.com/Ntxfloy/valheim-auto-translator",
   "description": "Автоперевод английских строк модов Valheim на русский через ваш OpenAI-совместимый сервис. Сохраняет переводы в локальном кэше.",
   "dependencies": [

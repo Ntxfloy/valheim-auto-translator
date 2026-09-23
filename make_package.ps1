@@ -7,7 +7,7 @@ $manifest = Join-Path $PSScriptRoot 'manifest.json'
 $readme = Join-Path $PSScriptRoot 'README.md'
 $changelog = Join-Path $PSScriptRoot 'CHANGELOG.md'
 $icon = Join-Path $PSScriptRoot 'icon.png'
-$archive = Join-Path $PSScriptRoot 'Ntxfloy-ValheimAutoTranslator-0.1.3.zip'
+$archive = Join-Path $PSScriptRoot 'Ntxfloy-ValheimAutoTranslator-0.1.4.zip'
 
 foreach ($required in @($DllPath, $manifest, $readme, $changelog)) {
     if (-not (Test-Path -LiteralPath $required)) { throw "Missing: $required" }

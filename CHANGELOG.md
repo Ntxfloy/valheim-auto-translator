@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4
+
+- Исправлено обновление интерфейса: готовые переводы применяются к видимому тексту без принудительной перелокализации всего окна. Это предотвращает подмену динамического содержимого служебным текстом Valheim.
+
 ## 0.1.3
 
 - Detect unchanged model responses before writing to the cache, and give the model a clearer retry hint.

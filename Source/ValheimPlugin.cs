@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Reflection;
 using System.Threading;
 using BepInEx;
 using BepInEx.Logging;
@@ -9,7 +7,7 @@ using UnityEngine;
 
 namespace ValheimAutoTranslator
 {
-    [BepInPlugin("ntxfloy.valheimautotranslator", "Valheim Auto Translator", "0.1.3")]
+    [BepInPlugin("ntxfloy.valheimautotranslator", "Valheim Auto Translator", "0.1.4")]
     public sealed class ValheimPlugin : BaseUnityPlugin
     {
         private Harmony harmony;
@@ -17,8 +15,6 @@ namespace ValheimAutoTranslator
         private static volatile bool languageKnown;
         private static volatile bool russianLanguage;
         private static float nextRefresh;
-        private static readonly List<WeakReference> Roots = new List<WeakReference>();
-        private static readonly object RootLock = new object();
         internal static ManualLogSource Log;
 
         private void Awake()
@@ -67,17 +63,6 @@ namespace ValheimAutoTranslator
             return source;
         }
 
-        internal static void Register(Transform root)
-        {
-            if (root == null) return;
-            lock (RootLock)
-            {
-                foreach (WeakReference reference in Roots)
-                    if (ReferenceEquals(reference.Target, root)) return;
-                Roots.Add(new WeakReference(root));
-            }
-        }
-
         internal static void ScheduleRefresh()
         {
             Interlocked.Exchange(ref refreshNeeded, 1);
@@ -90,25 +75,7 @@ namespace ValheimAutoTranslator
             nextRefresh = Time.realtimeSinceStartup + 1f;
             try
             {
-                var localization = Localization.instance;
-                if (!IsRussian(localization)) return;
-                FieldInfo field = AccessTools.Field(typeof(Localization), "m_cache");
-                object cache = field != null ? field.GetValue(localization) : null;
-                if (cache != null)
-                {
-                    MethodInfo evict = AccessTools.Method(cache.GetType(), "EvictAll");
-                    if (evict != null) evict.Invoke(cache, null);
-                }
-                lock (RootLock)
-                {
-                    for (int i = Roots.Count - 1; i >= 0; i--)
-                    {
-                        Transform root = Roots[i].Target as Transform;
-                        if (root == null) { Roots.RemoveAt(i); continue; }
-                        localization.ReLocalizeAll(root);
-                        localization.Localize(root);
-                    }
-                }
+                if (!IsRussian(Localization.instance)) return;
                 UiHarvest.Refresh();
             }
             catch (Exception ex) { Logger.LogWarning("Refresh failed: " + ex); }
@@ -150,12 +117,6 @@ namespace ValheimAutoTranslator
             if (__result[0] == '[' && __result[__result.Length - 1] == ']') return;
             __result = ValheimPlugin.Get("keyed", __result);
         }
-    }
-
-    [HarmonyPatch(typeof(Localization), "Localize", new[] { typeof(Transform) })]
-    internal static class PatchLocalizeRoot
-    {
-        private static void Postfix(Transform root) { ValheimPlugin.Register(root); }
     }
 
     [HarmonyPatch(typeof(MessageHud), "ShowMessage")]
