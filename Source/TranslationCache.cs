@@ -37,7 +37,7 @@ namespace ValheimAutoTranslator
 
         public static void AddPermanentFailed(string context, string source, string reason)
         {
-            if (string.IsNullOrEmpty(source)) return;
+            if (string.IsNullOrEmpty(source) || !PlaceholderGuard.IsStructuralFailure(reason)) return;
             string key = Key(context, source);
             if (!PermanentFailed.TryAdd(key, 0)) return;
             lock (FileLock)
@@ -46,7 +46,7 @@ namespace ValheimAutoTranslator
                 {
                     if (!string.IsNullOrEmpty(failedPath))
                     {
-                        string line = Encode(context) + "\t" + Encode(source) + "\t" + (reason ?? "") + Environment.NewLine;
+                        string line = Encode(context) + "\t" + Encode(source) + "\t" + Encode(reason) + Environment.NewLine;
                         File.AppendAllText(failedPath, line, Encoding.UTF8);
                     }
                 }
@@ -56,7 +56,14 @@ namespace ValheimAutoTranslator
 
         public static bool TryGet(string context, string source, out string result)
         {
+            string requestSource;
+            return TryGet(context, source, out result, out requestSource);
+        }
+
+        internal static bool TryGet(string context, string source, out string result, out string requestSource)
+        {
             result = null;
+            requestSource = source;
             if (string.IsNullOrEmpty(source)) return false;
             if (Items.TryGetValue(Key(context, source), out result)) return true;
 
@@ -64,6 +71,7 @@ namespace ValheimAutoTranslator
             List<string> numbers;
             if (PlaceholderGuard.TryTemplateNumbers(source, out template, out numbers))
             {
+                requestSource = template;
                 string templatedResult;
                 if (Items.TryGetValue(Key(context, template), out templatedResult))
                 {
@@ -76,7 +84,13 @@ namespace ValheimAutoTranslator
 
         public static bool IsKnownTranslation(string text)
         {
-            return !string.IsNullOrEmpty(text) && TranslatedValues.ContainsKey(text);
+            if (string.IsNullOrEmpty(text)) return false;
+            if (TranslatedValues.ContainsKey(text)) return true;
+            if (!TextSafety.ContainsCyrillic(text)) return false;
+            string template;
+            List<string> numbers;
+            return PlaceholderGuard.TryTemplateNumbers(text, out template, out numbers) &&
+                TranslatedValues.ContainsKey(template);
         }
 
         public static void Load(string model)
@@ -89,7 +103,7 @@ namespace ValheimAutoTranslator
             string safeModel = Regex.Replace(model ?? "default", @"[^a-zA-Z0-9._-]", "_");
             if (safeModel.Length > 80) safeModel = safeModel.Substring(0, 80);
             path = System.IO.Path.Combine(dir, "cache-" + Prompt.PromptVersion + "-" + safeModel + ".tsv");
-            failedPath = System.IO.Path.Combine(dir, "failed-" + safeModel + ".tsv");
+            failedPath = System.IO.Path.Combine(dir, "failed-" + Prompt.PromptVersion + "-" + safeModel + ".tsv");
             if (File.Exists(failedPath))
             {
                 try

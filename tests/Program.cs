@@ -29,10 +29,22 @@ static class Program
 
         string numTemplate;
         List<string> numbers;
-        Check(PlaceholderGuard.TryTemplateNumbers("Wood 34/50", out numTemplate, out numbers) && numTemplate == "Wood {0}/{1}" && numbers.Count == 2 && numbers[0] == "34" && numbers[1] == "50", "number templating creates correct template");
-        Check(PlaceholderGuard.RestoreNumbers("Дерево {0}/{1}", numbers) == "Дерево 34/50", "number restoration works");
+        Check(PlaceholderGuard.TryTemplateNumbers("Wood 34/50", out numTemplate, out numbers) && numTemplate == "Wood [[GATNUM:0]]/[[GATNUM:1]]" && numbers.Count == 2 && numbers[0] == "34" && numbers[1] == "50", "number templating creates correct template");
+        Check(PlaceholderGuard.RestoreNumbers("Дерево [[GATNUM:0]]/[[GATNUM:1]]", numbers) == "Дерево 34/50", "number restoration works");
+        Check(PlaceholderGuard.TryTemplateNumbers("Deals {0} damage to 3 enemies", out numTemplate, out numbers) && numTemplate == "Deals {0} damage to [[GATNUM:0]] enemies", "number marker cannot collide with game placeholder");
+        Check(PlaceholderGuard.RestoreNumbers("Наносит {0} урона [[GATNUM:0]] врагам", numbers) == "Наносит {0} урона 3 врагам", "real game placeholder survives number restoration");
+        Dictionary<int, string> mixedMarkers;
+        string mixedMasked = PlaceholderGuard.MaskPlaceholders(numTemplate, out mixedMarkers);
+        Check(mixedMarkers.Count == 2 && mixedMarkers[1] == "{0}" && mixedMarkers[2] == "[[GATNUM:0]]", "both real and numeric placeholders are independently protected");
+        string mixedTranslated = PlaceholderGuard.UnmaskPlaceholders("Наносит ⟦1⟧ урона ⟦2⟧ врагам", mixedMarkers);
+        Check(PlaceholderGuard.Validate(numTemplate, mixedTranslated, out reason), "translated numeric template validates: " + reason);
+        Check(PlaceholderGuard.RestoreNumbers(mixedTranslated, numbers) == "Наносит {0} урона 3 врагам", "full template round trip preserves game placeholder");
+        Check(!PlaceholderGuard.TryTemplateNumbers("[[GATNUM:0]] 3", out numTemplate, out numbers), "existing private marker is not reused");
         Check(!PlaceholderGuard.TryTemplateNumbers("YOU ARE NOT WORTHY! DEFEAT $1!", out numTemplate, out numbers), "$1 placeholder not broken by number templating");
         Check(!PlaceholderGuard.TryTemplateNumbers("Choose a Demigod", out numTemplate, out numbers), "text without numbers not templated");
+        Check(PlaceholderGuard.IsStructuralFailure("плейсхолдеры не совпадают: [] -> []"), "placeholder failure is structural");
+        Check(!PlaceholderGuard.IsStructuralFailure("missing response id"), "missing model response is transient");
+        Check(!PlaceholderGuard.IsStructuralFailure("модель вернула исходную строку без перевода"), "unchanged model response is transient");
 
         Dictionary<int, string> tokenMap;
         string tokenSource = "DEFEAT $enemy_eikthyr NOW!";
@@ -47,22 +59,27 @@ static class Program
         TranslationCache.Load("test-model");
         Check(TranslationCache.Put("ui", "Welcome to RtDMMO!", "Добро пожаловать в RtDMMO!"), "cache write");
         Check(TranslationCache.IsKnownTranslation("Добро пожаловать в RtDMMO!"), "translated output recognized");
-        Check(TranslationCache.Put("ui", "Wood {0}/{1}", "Дерево {0}/{1}"), "templated cache write");
+        Check(TranslationCache.Put("ui", "Wood [[GATNUM:0]]/[[GATNUM:1]]", "Дерево [[GATNUM:0]]/[[GATNUM:1]]"), "templated cache write");
         string templatedCached;
         Check(TranslationCache.TryGet("ui", "Wood 99/100", out templatedCached) && templatedCached == "Дерево 99/100", "templated number dynamic match from cache");
+        Check(TranslationCache.IsKnownTranslation("Дерево 99/100"), "materialized numbered translation recognized");
+        Check(TranslationCache.Put("ui", "Mage [[GATNUM:0]]", "Маг wood [[GATNUM:0]]"), "mixed-script templated cache write");
+        Check(TranslationCache.IsKnownTranslation("Маг wood 34"), "materialized mixed-script translation recognized");
         TranslationCache.Load("test-model");
         Check(TranslationCache.IsKnownTranslation("Добро пожаловать в RtDMMO!"), "translated output recognized after restart");
         Check(TranslationCache.TryGet("ui", "Wood 12/20", out templatedCached) && templatedCached == "Дерево 12/20", "templated number dynamic match after cache reload");
         string cached;
         Check(TranslationCache.TryGet("ui", "Welcome to RtDMMO!", out cached) && cached == "Добро пожаловать в RtDMMO!", "existing cache preserved");
 
-        TranslationCache.AddPermanentFailed("ui", "BrokenString123", "structural failure");
+        TranslationCache.AddPermanentFailed("ui", "TransientString", "missing response id");
+        Check(!TranslationCache.IsPermanentFailed("ui", "TransientString"), "transient failure is not persisted");
+        TranslationCache.AddPermanentFailed("ui", "BrokenString123", "плейсхолдеры не совпадают");
         Check(TranslationCache.IsPermanentFailed("ui", "BrokenString123"), "permanent failure recognized");
         TranslationCache.Load("test-model");
         Check(TranslationCache.IsPermanentFailed("ui", "BrokenString123"), "permanent failure preserved across restart");
 
         File.Delete(TranslationCache.PathOnDisk);
-        string failedFile = Path.Combine(temp, "ValheimAutoTranslator", "failed-test-model.tsv");
+        string failedFile = Path.Combine(temp, "ValheimAutoTranslator", "failed-test-test-model.tsv");
         if (File.Exists(failedFile)) File.Delete(failedFile);
         Directory.Delete(Path.Combine(temp, "ValheimAutoTranslator"));
         Directory.Delete(temp);

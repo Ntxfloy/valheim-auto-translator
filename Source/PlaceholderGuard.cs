@@ -489,6 +489,17 @@ namespace ValheimAutoTranslator
 			return true;
 		}
 
+		/// <summary>Only invariant damage belongs in the persistent failed cache.</summary>
+		public static bool IsStructuralFailure(string reason)
+		{
+			if (string.IsNullOrEmpty(reason)) return false;
+			return reason.StartsWith("плейсхолдеры не совпадают", StringComparison.Ordinal) ||
+				reason.StartsWith("русский фрагмент исходника потерян", StringComparison.Ordinal) ||
+				reason.StartsWith("утерян или изменен синтаксис грамматики", StringComparison.Ordinal) ||
+				reason.StartsWith("в ответе остались нераспознанные маркеры", StringComparison.Ordinal) ||
+				reason.StartsWith("незакрытый тег color", StringComparison.Ordinal);
+		}
+
 		/// <summary>
 		/// Приводит полноширинные знаки к ASCII: ｛０｝ -> {0}, （ -> (, идеографический пробел -> обычный.
 		/// Вызывать ОБЯЗАТЕЛЬНО до Validate, иначе корректный перевод улетит в карантин
@@ -660,7 +671,8 @@ namespace ValheimAutoTranslator
 			RegexOptions.Compiled);
 
 		/// <summary>
-		/// Маскирует независимые числа в строке под {0}, {1}, … для шаблонизации динамических строк (например, "Wood 34/50" -> "Wood {0}/{1}").
+		/// Маскирует независимые числа в строке под [[GATNUM:0]], [[GATNUM:1]], …
+		/// (например, "Wood 34/50" -> "Wood [[GATNUM:0]]/[[GATNUM:1]]").
 		/// Числа внутри тегов, плейсхолдеров и служебных токенов НЕ затрагиваются.
 		/// </summary>
 		public static bool TryTemplateNumbers(string src, out string template, out List<string> numbers)
@@ -668,10 +680,11 @@ namespace ValheimAutoTranslator
 			template = src;
 			numbers = null;
 			if (string.IsNullOrEmpty(src)) return false;
+			if (!TextSafety.ContainsDigit(src) || src.IndexOf("[[GATNUM:", StringComparison.Ordinal) >= 0) return false;
 
-			var phMatches = GetPlaceholderMatches(src);
 			var numMatches = NumberPattern.Matches(src);
 			if (numMatches.Count == 0) return false;
+			var phMatches = GetPlaceholderMatches(src);
 
 			var validNums = new List<Match>();
 			foreach (Match nm in numMatches)
@@ -698,7 +711,7 @@ namespace ValheimAutoTranslator
 			{
 				Match m = validNums[idx];
 				sb.Append(src, prev, m.Index - prev);
-				sb.Append('{').Append(idx).Append('}');
+				sb.Append("[[GATNUM:").Append(idx).Append("]]");
 				numbers.Add(m.Value);
 				prev = m.Index + m.Length;
 			}
@@ -708,7 +721,7 @@ namespace ValheimAutoTranslator
 		}
 
 		/// <summary>
-		/// Подставляет извлечённые числа обратно в переведённый шаблон по {0}, {1}, …
+		/// Подставляет извлечённые числа обратно только по маркерам [[GATNUM:N]].
 		/// </summary>
 		public static string RestoreNumbers(string template, List<string> numbers)
 		{
@@ -717,17 +730,18 @@ namespace ValheimAutoTranslator
 			int i = 0;
 			while (i < template.Length)
 			{
-				if (template[i] == '{')
+				if (template[i] == '[' && i + 9 < template.Length &&
+					string.Compare(template, i, "[[GATNUM:", 0, 9, StringComparison.Ordinal) == 0)
 				{
-					int close = template.IndexOf('}', i + 1);
-					if (close > i + 1 && close - i <= 4)
+					int close = template.IndexOf("]]", i + 9, StringComparison.Ordinal);
+					if (close > i + 9 && close - i <= 16)
 					{
-						string numStr = template.Substring(i + 1, close - i - 1);
+						string numStr = template.Substring(i + 9, close - i - 9);
 						int idx;
 						if (int.TryParse(numStr, out idx) && idx >= 0 && idx < numbers.Count)
 						{
 							sb.Append(numbers[idx]);
-							i = close + 1;
+							i = close + 2;
 							continue;
 						}
 					}

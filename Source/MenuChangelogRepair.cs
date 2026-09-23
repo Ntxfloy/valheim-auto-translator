@@ -8,6 +8,8 @@ namespace ValheimAutoTranslator
         private static float nextCheck;
         private static int errorCount;
         private static bool disabled;
+        private static float lastRepair;
+        private static int rapidRepairs;
 
         internal static void Tick()
         {
@@ -27,6 +29,15 @@ namespace ValheimAutoTranslator
                 string actual = changelog.GetPlatformText();
                 if (string.IsNullOrEmpty(actual) || TextSafety.IsDemoChangelog(actual)) return;
                 label.text = actual;
+                float now = Time.realtimeSinceStartup;
+                rapidRepairs = now - lastRepair < 5f ? rapidRepairs + 1 : 1;
+                lastRepair = now;
+                if (rapidRepairs >= 3)
+                {
+                    disabled = true;
+                    GATLog.Warn("Menu changelog was overwritten repeatedly; repair disabled for this session.");
+                    return;
+                }
                 GATLog.Msg("Restored main-menu changelog after scene transition.");
                 errorCount = 0;
             }

@@ -164,13 +164,20 @@ namespace ValheimAutoTranslator
         {
             job.LastFailure = reason;
             job.Attempts++;
-            if (!running || job.Attempts >= 3)
+            if (!running)
+            {
+                byte stopped;
+                Pending.TryRemove(job.Key, out stopped);
+                return;
+            }
+            if (job.Attempts >= 3)
             {
                 byte ignored;
                 Pending.TryRemove(job.Key, out ignored);
                 if (Rejected.Count >= MaxRejected) Rejected.Clear();
                 Rejected[job.Key] = DateTime.UtcNow.Ticks;
-                TranslationCache.AddPermanentFailed(job.Context, job.Source, reason);
+                if (PlaceholderGuard.IsStructuralFailure(reason))
+                    TranslationCache.AddPermanentFailed(job.Context, job.Source, reason);
                 if (settings != null && settings.verboseLogging)
                     GATLog.Warn("Rejected " + job.Context + " (length " + job.Source.Length + "): " + reason);
                 return;

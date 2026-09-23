@@ -13,6 +13,7 @@ namespace ValheimAutoTranslator
         {
             public WeakReference Control;
             public string Source;
+            public string RequestSource;
             public string Rendered;
             public bool IsTmp;
             public bool Queued;
@@ -37,18 +38,11 @@ namespace ValheimAutoTranslator
 
             string source = text;
             string translated;
-            bool cached = TranslationCache.TryGet("ui", source, out translated);
+            string requestSource;
+            bool cached = TranslationCache.TryGet("ui", source, out translated, out requestSource);
             if (cached) text = translated;
-            bool delayed = !cached && TextSafety.ContainsDigit(source);
-            if (!cached && !delayed)
-            {
-                string template;
-                List<string> numbers;
-                if (PlaceholderGuard.TryTemplateNumbers(source, out template, out numbers))
-                    TranslateWorker.Request("ui", template);
-                else
-                    TranslateWorker.Request("ui", source);
-            }
+            bool delayed = !cached && requestSource == source && TextSafety.ContainsDigit(source);
+            if (!cached && !delayed) TranslateWorker.Request("ui", requestSource);
 
             Entry previous;
             bool sameSource = Entries.TryGetValue(id, out previous) && previous.Source == source;
@@ -61,6 +55,7 @@ namespace ValheimAutoTranslator
             {
                 Control = new WeakReference(control),
                 Source = source,
+                RequestSource = requestSource,
                 Rendered = text,
                 IsTmp = isTmp,
                 Queued = queued,
@@ -82,12 +77,7 @@ namespace ValheimAutoTranslator
                 if (obj == null) { dead.Add(pair.Key); continue; }
                 string current = entry.IsTmp ? ((TMP_Text)obj).text : ((Text)obj).text;
                 if (current != entry.Rendered) { dead.Add(pair.Key); continue; }
-                string template;
-                List<string> numbers;
-                if (PlaceholderGuard.TryTemplateNumbers(entry.Source, out template, out numbers))
-                    TranslateWorker.Request("ui", template);
-                else
-                    TranslateWorker.Request("ui", entry.Source);
+                TranslateWorker.Request("ui", entry.RequestSource);
                 entry.Queued = true;
             }
             foreach (int id in dead) Entries.Remove(id);

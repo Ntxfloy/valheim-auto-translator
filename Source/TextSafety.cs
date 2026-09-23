@@ -21,5 +21,13 @@ namespace ValheimAutoTranslator
                 if (char.IsDigit(text[i])) return true;
             return false;
         }
+
+        internal static bool ContainsCyrillic(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+            for (int i = 0; i < text.Length; i++)
+                if (text[i] >= '\u0400' && text[i] <= '\u052F') return true;
+            return false;
+        }
     }
 }

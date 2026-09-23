@@ -16,6 +16,8 @@ namespace ValheimAutoTranslator
         private static volatile bool languageKnown;
         private static volatile bool russianLanguage;
         private static float nextRefresh;
+        private static int menuRepairFaults;
+        private static bool menuRepairDisabled;
         internal static ManualLogSource Log;
 
         private void Awake()
@@ -65,13 +67,9 @@ namespace ValheimAutoTranslator
             if (string.IsNullOrEmpty(source)) return source;
             if (TextSafety.IsDemoChangelog(source) || TranslationCache.IsKnownTranslation(source)) return source;
             string translated;
-            if (TranslationCache.TryGet(context, source, out translated)) return translated;
-            string template;
-            List<string> numbers;
-            if (PlaceholderGuard.TryTemplateNumbers(source, out template, out numbers))
-                TranslateWorker.Request(context, template);
-            else
-                TranslateWorker.Request(context, source);
+            string requestSource;
+            if (TranslationCache.TryGet(context, source, out translated, out requestSource)) return translated;
+            TranslateWorker.Request(context, requestSource);
             return source;
         }
 
@@ -87,7 +85,18 @@ namespace ValheimAutoTranslator
                 if (IsRussian(Localization.instance))
                 {
                     UiHarvest.Tick();
-                    MenuChangelogRepair.Tick();
+                    if (!menuRepairDisabled)
+                    {
+                        try { MenuChangelogRepair.Tick(); }
+                        catch (Exception ex)
+                        {
+                            if (++menuRepairFaults >= 3)
+                            {
+                                menuRepairDisabled = true;
+                                Logger.LogWarning("Menu changelog repair disabled after runtime errors: " + ex.Message);
+                            }
+                        }
+                    }
                 }
             }
             catch (Exception ex) { Logger.LogWarning("UI upkeep failed: " + ex); }
