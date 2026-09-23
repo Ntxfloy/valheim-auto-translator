@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace ValheimAutoTranslator
 {
-    [BepInPlugin("ntxfloy.valheimautotranslator", "Valheim Auto Translator", "0.1.4")]
+    [BepInPlugin("ntxfloy.valheimautotranslator", "Valheim Auto Translator", "0.1.5")]
     public sealed class ValheimPlugin : BaseUnityPlugin
     {
         private Harmony harmony;
@@ -20,6 +20,11 @@ namespace ValheimAutoTranslator
         private void Awake()
         {
             Log = Logger;
+            if (Application.isBatchMode)
+            {
+                Logger.LogInfo("Headless session: translation disabled.");
+                return;
+            }
             try
             {
                 GATSettings settings = GATSettings.Load(Config);
@@ -57,6 +62,7 @@ namespace ValheimAutoTranslator
         internal static string Get(string context, string source)
         {
             if (string.IsNullOrEmpty(source)) return source;
+            if (TextSafety.IsDemoChangelog(source) || TranslationCache.IsKnownTranslation(source)) return source;
             string translated;
             if (TranslationCache.TryGet(context, source, out translated)) return translated;
             TranslateWorker.Request(context, source);
@@ -70,6 +76,15 @@ namespace ValheimAutoTranslator
 
         private void Update()
         {
+            try
+            {
+                if (IsRussian(Localization.instance))
+                {
+                    UiHarvest.Tick();
+                    MenuChangelogRepair.Tick();
+                }
+            }
+            catch (Exception ex) { Logger.LogWarning("UI upkeep failed: " + ex); }
             if (Time.realtimeSinceStartup < nextRefresh ||
                 Interlocked.CompareExchange(ref refreshNeeded, 0, 1) != 1) return;
             nextRefresh = Time.realtimeSinceStartup + 1f;
@@ -92,9 +107,9 @@ namespace ValheimAutoTranslator
     [HarmonyPatch(typeof(Localization), "Localize", new[] { typeof(string) })]
     internal static class PatchLocalizeString
     {
-        private static void Prefix(Localization __instance, ref string text)
+        private static void Postfix(Localization __instance, ref string __result)
         {
-            if (ValheimPlugin.IsRussian(__instance)) text = ValheimPlugin.Get("template", text);
+            if (ValheimPlugin.IsRussian(__instance)) __result = ValheimPlugin.Get("template", __result);
         }
     }
 

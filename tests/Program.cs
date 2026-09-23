@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using ValheimAutoTranslator;
 
 static class Program
@@ -20,6 +21,25 @@ static class Program
         Check(!PlaceholderGuard.NeedsTranslation("ЭЙКТЮР"), "vanilla Russian name skipped");
         Check(PlaceholderGuard.NeedsTranslation("Bronze sword -> Iron sword"), "Valheim upgrade text with arrow translated");
         Check(!PlaceholderGuard.Validate("Bronze sword -> Iron sword", "Бронзовый меч — железный меч", out reason), "arrow syntax preserved");
+        Check(TextSafety.IsDemoChangelog("FIRST\n* Wopdasd\n* FLopr line 2\n* Line 3"), "vanilla demo changelog identified");
+        Check(TextSafety.IsDemoChangelog("* FLopr строка 2\n* Строка 3"), "translated demo changelog identified");
+        Check(!TextSafety.IsDemoChangelog("Welcome to RtDMMO!\nChoose a Demigod"), "real changelog retained");
+        Check(TextSafety.ContainsDigit("Wood 34/50"), "changing counter delayed");
+        Check(!TextSafety.ContainsDigit("Choose a Demigod"), "static text not delayed");
+
+        string temp = Path.Combine(Path.GetTempPath(), "ValheimAutoTranslator-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temp);
+        BepInEx.Paths.ConfigPath = temp;
+        TranslationCache.Load("test-model");
+        Check(TranslationCache.Put("ui", "Welcome to RtDMMO!", "Добро пожаловать в RtDMMO!"), "cache write");
+        Check(TranslationCache.IsKnownTranslation("Добро пожаловать в RtDMMO!"), "translated output recognized");
+        TranslationCache.Load("test-model");
+        Check(TranslationCache.IsKnownTranslation("Добро пожаловать в RtDMMO!"), "translated output recognized after restart");
+        string cached;
+        Check(TranslationCache.TryGet("ui", "Welcome to RtDMMO!", out cached) && cached == "Добро пожаловать в RtDMMO!", "existing cache preserved");
+        File.Delete(TranslationCache.PathOnDisk);
+        Directory.Delete(Path.Combine(temp, "ValheimAutoTranslator"));
+        Directory.Delete(temp);
         Console.WriteLine("Guard tests passed");
     }
 

@@ -15,17 +15,21 @@ namespace ValheimAutoTranslator
             public string Source;
             public string Rendered;
             public bool IsTmp;
+            public bool Queued;
+            public float FirstSeen;
         }
 
         private const int MaxTracked = 5000;
         private static readonly Dictionary<int, Entry> Entries = new Dictionary<int, Entry>();
+        private static float nextSweep;
         [ThreadStatic] private static bool applying;
 
         internal static void OnSet(UnityEngine.Object control, ref string text, bool isTmp)
         {
             if (applying || !ValheimPlugin.IsRussian(Localization.instance) || control == null) return;
             int id = control.GetInstanceID();
-            if (string.IsNullOrEmpty(text) || !PlaceholderGuard.NeedsTranslation(text))
+            if (string.IsNullOrEmpty(text) || TextSafety.IsDemoChangelog(text) ||
+                TranslationCache.IsKnownTranslation(text) || !PlaceholderGuard.NeedsTranslation(text))
             {
                 Entries.Remove(id);
                 return;
@@ -33,8 +37,15 @@ namespace ValheimAutoTranslator
 
             string source = text;
             string translated;
-            if (TranslationCache.TryGet("ui", source, out translated)) text = translated;
-            else TranslateWorker.Request("ui", source);
+            bool cached = TranslationCache.TryGet("ui", source, out translated);
+            if (cached) text = translated;
+            bool delayed = !cached && TextSafety.ContainsDigit(source);
+            if (!cached && !delayed) TranslateWorker.Request("ui", source);
+
+            Entry previous;
+            bool sameSource = Entries.TryGetValue(id, out previous) && previous.Source == source;
+            float firstSeen = sameSource ? previous.FirstSeen : Time.realtimeSinceStartup;
+            bool queued = cached || !delayed || (sameSource && previous.Queued);
 
             if (Entries.Count >= MaxTracked && !Entries.ContainsKey(id)) PruneDead();
             if (Entries.Count >= MaxTracked && !Entries.ContainsKey(id)) return;
@@ -43,8 +54,30 @@ namespace ValheimAutoTranslator
                 Control = new WeakReference(control),
                 Source = source,
                 Rendered = text,
-                IsTmp = isTmp
+                IsTmp = isTmp,
+                Queued = queued,
+                FirstSeen = firstSeen
             };
+        }
+
+        internal static void Tick()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now < nextSweep) return;
+            nextSweep = now + 0.25f;
+            var dead = new List<int>();
+            foreach (var pair in Entries)
+            {
+                Entry entry = pair.Value;
+                if (entry.Queued || now - entry.FirstSeen < 1f) continue;
+                UnityEngine.Object obj = entry.Control.Target as UnityEngine.Object;
+                if (obj == null) { dead.Add(pair.Key); continue; }
+                string current = entry.IsTmp ? ((TMP_Text)obj).text : ((Text)obj).text;
+                if (current != entry.Rendered) { dead.Add(pair.Key); continue; }
+                TranslateWorker.Request("ui", entry.Source);
+                entry.Queued = true;
+            }
+            foreach (int id in dead) Entries.Remove(id);
         }
 
         private static void PruneDead()

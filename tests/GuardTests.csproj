@@ -6,6 +6,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
+    <Compile Include="CacheStubs.cs" />
     <Compile Include="..\Source\PlaceholderGuard.cs" Link="PlaceholderGuard.cs" />
+    <Compile Include="..\Source\TextSafety.cs" Link="TextSafety.cs" />
+    <Compile Include="..\Source\TranslationCache.cs" Link="TranslationCache.cs" />
   </ItemGroup>
 </Project>

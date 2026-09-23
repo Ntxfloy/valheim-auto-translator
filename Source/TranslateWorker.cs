@@ -58,7 +58,8 @@ namespace ValheimAutoTranslator
 
         public static void Request(string context, string source)
         {
-            if (!running || !PlaceholderGuard.NeedsTranslation(source)) return;
+            if (!running || TextSafety.IsDemoChangelog(source) ||
+                TranslationCache.IsKnownTranslation(source) || !PlaceholderGuard.NeedsTranslation(source)) return;
             string cached;
             if (TranslationCache.TryGet(context, source, out cached)) return;
             string key = context + "\t" + source;

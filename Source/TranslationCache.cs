@@ -12,6 +12,8 @@ namespace ValheimAutoTranslator
     {
         private static readonly ConcurrentDictionary<string, string> Items =
             new ConcurrentDictionary<string, string>(StringComparer.Ordinal);
+        private static readonly ConcurrentDictionary<string, byte> TranslatedValues =
+            new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
         private static readonly object FileLock = new object();
         private static string path;
 
@@ -28,9 +30,15 @@ namespace ValheimAutoTranslator
             return Items.TryGetValue(Key(context, source), out result);
         }
 
+        public static bool IsKnownTranslation(string text)
+        {
+            return !string.IsNullOrEmpty(text) && TranslatedValues.ContainsKey(text);
+        }
+
         public static void Load(string model)
         {
             Items.Clear();
+            TranslatedValues.Clear();
             string dir = System.IO.Path.Combine(Paths.ConfigPath, "ValheimAutoTranslator");
             Directory.CreateDirectory(dir);
             string safeModel = Regex.Replace(model ?? "default", @"[^a-zA-Z0-9._-]", "_");
@@ -47,7 +55,10 @@ namespace ValheimAutoTranslator
                     string source = Decode(parts[1]);
                     string result = Decode(parts[2]);
                     if (source.Length > 0 && result.Length > 0)
+                    {
                         Items[Key(context, source)] = result;
+                        TranslatedValues[result] = 0;
+                    }
                 }
                 catch (FormatException) { }
             }
@@ -64,6 +75,7 @@ namespace ValheimAutoTranslator
                 // Publish only after the append succeeds, so a disk error can be retried.
                 File.AppendAllText(path, line, Encoding.UTF8);
                 Items[key] = result;
+                TranslatedValues[result] = 0;
                 return true;
             }
         }
